@@ -717,6 +717,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
         down_block_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
+        adapter_down_block_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
         mid_block_additional_residual: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         return_dict: bool = True,
@@ -917,15 +918,15 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         # 3. down
 
         is_controlnet = mid_block_additional_residual is not None and down_block_additional_residuals is not None
-        is_adapter = mid_block_additional_residual is None and down_block_additional_residuals is not None
+        is_adapter = adapter_down_block_additional_residuals is not None
 
         down_block_res_samples = (sample,)
         for downsample_block in self.down_blocks:
             if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
                 # For t2i-adapter CrossAttnDownBlock2D
                 additional_residuals = {}
-                if is_adapter and len(down_block_additional_residuals) > 0:
-                    additional_residuals["additional_residuals"] = down_block_additional_residuals.pop(0)
+                if is_adapter and len(adapter_down_block_additional_residuals) > 0:
+                    additional_residuals["additional_residuals"] = adapter_down_block_additional_residuals.pop(0)
 
                 sample, res_samples = downsample_block(
                     hidden_states=sample,
@@ -939,8 +940,9 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             else:
                 sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
 
-                if is_adapter and len(down_block_additional_residuals) > 0:
-                    sample += down_block_additional_residuals.pop(0)
+                # only applies to adapter
+                if is_adapter and len(adapter_down_block_additional_residuals) > 0:
+                    sample += adapter_down_block_additional_residuals.pop(0)
 
             down_block_res_samples += res_samples
 
